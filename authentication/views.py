@@ -134,6 +134,7 @@ class RegisterAPIView(APIView):
         phone_number = request.data.get(
             "phone_number"
         )
+        role = request.data.get("role", "customer")
 
         if not username or not password:
             return Response(
@@ -142,6 +143,22 @@ class RegisterAPIView(APIView):
                     "Username and password are required"
                 },
                 status=400,
+            )
+
+        valid_roles = {value for value, _ in User.ROLE_CHOICES}
+        if not isinstance(role, str) or role not in valid_roles:
+            return Response(
+                {"error": "Invalid role"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if role != "customer" and not (
+            request.user.is_authenticated
+            and request.user.role == "admin"
+        ):
+            return Response(
+                {"error": "Only admins can create non-customer users"},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         if User.objects.filter(
@@ -158,13 +175,15 @@ class RegisterAPIView(APIView):
         user = User.objects.create_user(
             username=username,
             password=password,
-            role="customer",
+            role=role,
             phone_number=phone_number,
         )
 
         return Response({
             "message":
-            "Customer created successfully",
+            "User created successfully",
             "username":
             user.username,
+            "role":
+            user.role,
         })

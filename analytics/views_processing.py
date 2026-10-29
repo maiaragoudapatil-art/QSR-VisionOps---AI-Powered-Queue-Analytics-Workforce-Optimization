@@ -12,6 +12,7 @@ from analytics.models import (
 from analytics.video_analytics import (
     process_video,
 )
+from analytics.alert_evidence import record_threshold_alerts
 
 from branches.models import Camera
 
@@ -51,7 +52,22 @@ class RunAnalyticsAPIView(APIView):
             video.save(update_fields=["status"])
 
             try:
-                metrics = process_video(video.video_file.path)
+                created_alert_types = set()
+
+                def record_frame_alerts(frame_metrics, frame):
+                    record_threshold_alerts(
+                        camera,
+                        frame_metrics,
+                        frame,
+                        source_video=video.video_file.name,
+                        created_types=created_alert_types,
+                        resolve_inactive=False,
+                    )
+
+                metrics = process_video(
+                    video.video_file.path,
+                    on_frame=record_frame_alerts,
+                )
 
                 LiveAnalytics.objects.create(
                     uploaded_video=video,

@@ -41,6 +41,7 @@ class Alert(models.Model):
         ("queue", "Queue Alert"),
         ("wait_time", "Wait Time Alert"),
         ("occupancy", "Occupancy Alert"),
+        ("staff_shortage", "Staff Shortage"),
     )
 
     SEVERITY_CHOICES = (

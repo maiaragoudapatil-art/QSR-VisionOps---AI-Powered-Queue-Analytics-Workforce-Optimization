@@ -2,22 +2,51 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 
 from analytics.models import LiveAnalytics
+from branches.models import Branch
 
 
 class DashboardAPIView(APIView):
 
     def get(self, request):
 
-        latest = LiveAnalytics.objects.order_by(
+        analytics = LiveAnalytics.objects.values(
+            "branch_id",
+            "branch__branch_name",
+            "camera__camera_name",
+            "customer_count",
+            "queue_length",
+            "average_wait_time",
+            "occupancy",
+            "created_at",
+        )
+        requested_branch = request.query_params.get("branch")
+        if requested_branch:
+            try:
+                branch = Branch.objects.get(pk=requested_branch, is_active=True)
+            except (Branch.DoesNotExist, ValueError):
+                return Response({
+                    "branch_id": None,
+                    "branch": None,
+                    "message": "Branch not found",
+                })
+            analytics = analytics.filter(branch=branch)
+        else:
+            branch = None
+
+        latest = analytics.order_by(
             "-created_at"
         ).first()
 
         if not latest:
-            return Response({
-                "message": "No analytics data available"
-            })
+            response = {"message": "No analytics data available"}
+            if branch:
+                response.update({
+                    "branch_id": branch.pk,
+                    "branch": branch.branch_name,
+                })
+            return Response(response)
 
-        queue_length = latest.queue_length
+        queue_length = latest["queue_length"]
 
         if queue_length <= 5:
             status = "Normal"
@@ -33,19 +62,18 @@ class DashboardAPIView(APIView):
 
         return Response({
 
-            "branch": latest.branch.branch_name,
+            "branch_id": latest["branch_id"],
+            "branch": latest["branch__branch_name"],
 
-            "camera": latest.camera.camera_name,
+            "camera": latest["camera__camera_name"],
 
-            "customer_count": latest.customer_count,
+            "customer_count": latest["customer_count"],
 
-            "queue_length": latest.queue_length,
+            "queue_length": latest["queue_length"],
 
-            "average_wait_time":
-                latest.average_wait_time,
+            "average_wait_time": latest["average_wait_time"],
 
-            "occupancy":
-                latest.occupancy,
+            "occupancy": latest["occupancy"],
 
             "status":
                 status,

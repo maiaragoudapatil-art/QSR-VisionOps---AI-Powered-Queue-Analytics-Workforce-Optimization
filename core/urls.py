@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import path, include
 from django.http import JsonResponse
 from rest_framework_simplejwt.views import (
@@ -7,6 +9,7 @@ from rest_framework_simplejwt.views import (
 )
 from authentication.views import SettingsAPIView
 from feedback.views import CustomerFeedbackAPIView, RewardsAPIView
+from staff.views import UserManagementAPIView
 
 def home(request):
     return JsonResponse({
@@ -22,6 +25,9 @@ urlpatterns = [
         "api/",
         include("analytics.urls")
     ),
+    path("api/", include("branches.urls")),
+    path("api/users/", UserManagementAPIView.as_view(), name="user-management"),
+    path("api/staff/", include("staff.urls")),
 
     path(
         "api/dashboard/",
@@ -66,3 +72,6 @@ path(
 ),
     
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

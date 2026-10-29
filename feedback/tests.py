@@ -2,7 +2,9 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from authentication.models import User
+from branches.models import Branch
 from feedback.models import CustomerFeedback
+from staff.models import Staff
 
 
 class CustomerRewardsAPIViewTests(TestCase):
@@ -34,6 +36,18 @@ class CustomerFeedbackAPIViewTests(TestCase):
         )
         self.client = APIClient()
         self.client.force_authenticate(user=self.customer)
+        self.branch = Branch.objects.create(
+            branch_code="FEEDBACK",
+            branch_name="Feedback Branch",
+            city="Test City",
+            address="Test Address",
+        )
+        self.staff = Staff.objects.create(
+            employee_id="FEEDBACK-1",
+            name="Alex Staff",
+            branch=self.branch,
+            shift="Morning",
+        )
 
     def test_customer_can_submit_feedback(self):
         response = self.client.post(
@@ -47,6 +61,54 @@ class CustomerFeedbackAPIViewTests(TestCase):
         saved_feedback = CustomerFeedback.objects.get(customer=self.customer)
         self.assertEqual(saved_feedback.rating, 5)
         self.assertEqual(saved_feedback.comments, "Great service.")
+
+    def test_customer_can_submit_feedback_for_staff_and_branch(self):
+        response = self.client.post(
+            "/api/feedback/",
+            {
+                "staff_id": self.staff.pk,
+                "rating": 5,
+                "comment": "Great service.",
+                "branch": self.branch.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        saved_feedback = CustomerFeedback.objects.get(customer=self.customer)
+        self.assertEqual(saved_feedback.staff, self.staff)
+        self.assertEqual(saved_feedback.branch, self.branch)
+        self.assertEqual(response.data["staff_id"], self.staff.pk)
+        self.assertEqual(response.data["branch"], self.branch.pk)
+        self.assertIsNotNone(response.data["created_at"])
+
+    def test_feedback_rejects_staff_from_another_branch(self):
+        other_branch = Branch.objects.create(
+            branch_code="FEEDBACK-OTHER",
+            branch_name="Other Branch",
+            city="Other City",
+            address="Other Address",
+        )
+        other_staff = Staff.objects.create(
+            employee_id="FEEDBACK-2",
+            name="Other Staff",
+            branch=other_branch,
+            shift="Evening",
+        )
+
+        response = self.client.post(
+            "/api/feedback/",
+            {
+                "staff_id": other_staff.pk,
+                "rating": 5,
+                "comment": "Great service.",
+                "branch": self.branch.pk,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(CustomerFeedback.objects.count(), 0)
 
     def test_feedback_requires_valid_rating_and_comment(self):
         response = self.client.post(

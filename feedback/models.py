@@ -33,6 +33,20 @@ class CustomerFeedback(models.Model):
         on_delete=models.CASCADE,
         related_name="customer_feedback",
     )
+    staff = models.ForeignKey(
+        Staff,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_feedback",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_feedback",
+    )
     rating = models.PositiveSmallIntegerField()
     comments = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)

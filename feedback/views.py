@@ -3,6 +3,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from branches.models import Branch
+from staff.models import Staff
 from .models import CustomerFeedback
 
 
@@ -55,6 +57,8 @@ class CustomerFeedbackAPIView(APIView):
 
         rating = request.data.get("rating")
         comment = request.data.get("comment")
+        staff_id = request.data.get("staff_id")
+        branch_id = request.data.get("branch")
 
         if (
             isinstance(rating, bool)
@@ -73,17 +77,43 @@ class CustomerFeedbackAPIView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        staff = None
+        branch = None
+        if staff_id is not None or branch_id is not None:
+            if staff_id is None or branch_id is None:
+                return Response(
+                    {"error": "Both staff_id and branch are required."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            try:
+                branch = Branch.objects.get(pk=branch_id, is_active=True)
+                staff = Staff.objects.get(
+                    pk=staff_id,
+                    branch=branch,
+                    active=True,
+                )
+            except (Branch.DoesNotExist, Staff.DoesNotExist, ValueError, TypeError):
+                return Response(
+                    {"error": "Selected staff member is not available for this branch."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
         feedback = CustomerFeedback.objects.create(
             customer=request.user,
             rating=rating,
             comments=comment.strip(),
+            staff=staff,
+            branch=branch,
         )
 
         return Response(
             {
                 "id": feedback.id,
+                "staff_id": feedback.staff_id,
+                "branch": feedback.branch_id,
                 "rating": feedback.rating,
                 "comment": feedback.comments,
+                "created_at": feedback.created_at,
                 "message": "Feedback submitted successfully.",
             },
             status=status.HTTP_201_CREATED,

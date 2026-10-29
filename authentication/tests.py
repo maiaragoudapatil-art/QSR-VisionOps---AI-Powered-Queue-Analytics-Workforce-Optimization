@@ -48,6 +48,71 @@ class ProfileAPIViewTests(TestCase):
         self.assertIsNone(response.data["branch"])
 
 
+class RegisterAPIViewRoleTests(TestCase):
+    def test_registration_defaults_to_customer(self):
+        response = APIClient().post(
+            "/api/auth/register/",
+            {"username": "new-customer", "password": "test-password"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(User.objects.get(username="new-customer").role, "customer")
+        self.assertEqual(response.data["role"], "customer")
+
+    def test_admin_can_create_selected_existing_roles(self):
+        admin = User.objects.create_user(
+            username="role-admin",
+            password="test-password",
+            role="admin",
+        )
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        for role in ("admin", "manager", "staff", "customer"):
+            response = client.post(
+                "/api/auth/register/",
+                {
+                    "username": f"created-{role}",
+                    "password": "test-password",
+                    "role": role,
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(User.objects.get(username=f"created-{role}").role, role)
+            self.assertEqual(response.data["role"], role)
+
+    def test_non_admin_cannot_create_elevated_role(self):
+        client = APIClient()
+        response = client.post(
+            "/api/auth/register/",
+            {"username": "public-manager", "password": "test-password", "role": "manager"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username="public-manager").exists())
+
+    def test_registration_rejects_unknown_role(self):
+        admin = User.objects.create_user(
+            username="invalid-role-admin",
+            password="test-password",
+            role="admin",
+        )
+        client = APIClient()
+        client.force_authenticate(admin)
+
+        response = client.post(
+            "/api/auth/register/",
+            {"username": "unknown-role", "password": "test-password", "role": "unknown"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"], "Invalid role")
+
+
 class SettingsAPIViewTests(TestCase):
 
     def setUp(self):

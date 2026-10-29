@@ -49,3 +49,43 @@ class AnalyticsResultsAPIViewTests(TestCase):
             "status": "completed",
             "processed_at": None,
         }])
+
+
+class CameraAlertEvidenceTests(TestCase):
+    def test_stream_analytics_creates_alert_and_snapshot_evidence(self):
+        from unittest.mock import Mock, patch
+        from analytics.camera_streams import CameraStreamWorker
+        from analytics.models import Alert, AlertEvidence
+        branch = Branch.objects.create(branch_code="EVENT", branch_name="Event Branch", city="City", address="Address")
+        camera = Camera.objects.create(branch=branch, camera_name="Event Camera", camera_code="EVENT-CAM", rtsp_url="rtsp://localhost/test")
+        encoded_image = Mock()
+        encoded_image.tobytes.return_value = b"jpeg-data"
+        metrics = {"queue_length": 8, "average_wait_time": 20, "occupancy": 100, "customer_count": 40}
+        with patch("analytics.camera_streams.cv2.imencode", return_value=(True, encoded_image)), \
+             patch("analytics.alert_evidence.default_storage.save", return_value="alert_evidence/event.jpg"):
+            CameraStreamWorker._update_alerts(camera, metrics, object())
+        self.assertEqual(Alert.objects.filter(camera=camera, is_resolved=False).count(), 4)
+        self.assertEqual(AlertEvidence.objects.count(), 4)
+        CameraStreamWorker._update_alerts(camera, metrics, object())
+        self.assertEqual(Alert.objects.filter(camera=camera).count(), 4)
+
+    def test_uploaded_video_alert_records_snapshot_and_source_video(self):
+        from unittest.mock import Mock, patch
+        from analytics.alert_evidence import record_threshold_alerts
+        from analytics.models import AlertEvidence
+        branch = Branch.objects.create(branch_code="UPLOAD", branch_name="Upload Branch", city="City", address="Address")
+        camera = Camera.objects.create(branch=branch, camera_name="Upload Camera", camera_code="UPLOAD-CAM", rtsp_url="rtsp://localhost/test")
+        encoded_image = Mock()
+        encoded_image.tobytes.return_value = b"jpeg-data"
+        with patch("analytics.alert_evidence.cv2.imencode", return_value=(True, encoded_image)), \
+             patch("analytics.alert_evidence.default_storage.save", return_value="alert_evidence/upload.jpg"):
+            record_threshold_alerts(
+                camera,
+                {"queue_length": 8, "average_wait_time": 20, "occupancy": 100},
+                object(),
+                source_video="videos/source.mp4",
+                created_types=set(),
+                resolve_inactive=False,
+            )
+        self.assertEqual(AlertEvidence.objects.count(), 4)
+        self.assertEqual(AlertEvidence.objects.first().video_path, "videos/source.mp4")
